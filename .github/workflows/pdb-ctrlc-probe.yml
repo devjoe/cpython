@@ -1,0 +1,65 @@
+name: Pdb Ctrl-C isolated probe
+
+# First run: push only to a dedicated test branch after explicit authorization.
+# workflow_dispatch requires the workflow to exist on the default branch; do not
+# modify the default branch just to enable it. The branch push trigger suffices.
+on:
+  push:
+    branches:
+      - 'pdb-ctrlc-probe/**'
+    paths:
+      - '.github/workflows/pdb-ctrlc-probe.yml'
+      - 'tools/pdb_ctrlc_probe.py'
+      - 'tools/test_probe.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pdb-ctrlc-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: github.repository == 'devjoe/cpython' && startsWith(github.ref, 'refs/heads/pdb-ctrlc-probe/')
+    name: ${{ matrix.os }} / ${{ matrix.runtime.version }} / ${{ matrix.runtime.backend }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-22.04]
+        runtime:
+          - {version: '3.12.3', backend: settrace}
+          - {version: '3.15.0', backend: settrace}
+          - {version: '3.15.0', backend: monitoring}
+    steps:
+      - name: Check out isolated probe files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Select exact released CPython (no source build)
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.runtime.version }}
+          architecture: x64
+          check-latest: false
+          allow-prereleases: false
+      - name: Check classifier rejects false positives
+        run: python -I tools/test_probe.py
+      - name: Collect evidence (exit 1 = non-resumable; exit 2 = infrastructure limitation)
+        run: >-
+          python -I tools/pdb_ctrlc_probe.py
+          --backend ${{ matrix.runtime.backend }}
+          --expected-version ${{ matrix.runtime.version }}
+          --output probe-results
+      - name: Upload evidence even when bug or infrastructure failure is reported
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pdb-${{ matrix.os }}-${{ matrix.runtime.version }}-${{ matrix.runtime.backend }}
+          path: probe-results/
+          if-no-files-found: warn
+          retention-days: 14
