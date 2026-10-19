@@ -2,7 +2,7 @@
 Origin: devjoe/cpython commit 3eb108d14ce75ea8f0a98b95d4bfaf958e36068d.
 Only ownership, console APIs, and non-consuming native observation are reused.
 """
-import os, sys, json, time, threading
+import os, sys, json, time, threading, signal
 from pathlib import Path
 _event_path = None
 _observer = None

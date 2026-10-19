@@ -31,7 +31,7 @@ security-setting change, or privilege escalation is included in the candidate.
 
 | Layer | Entrypoint/backend | Work/commands | Intended interpretation |
 | --- | --- | --- | --- |
-| Core | native `python -m pdb`, default settrace | busy, sleep, bounded socketpair recv × c/n/until/return | Observe live-frame resume, unwind, PM, and delay separately |
+| Core | native `python -m pdb`, its actual backend | busy, sleep, bounded socketpair recv × c/n/until/return | Observe live-frame resume, unwind, PM, and delay separately |
 | Core | `breakpoint()` and public `pdb.set_trace()` | same 12 cases each | Their native backend; do not pretend to select an unsupported one |
 | Core | `Pdb(...).runcall()` | same 12 cases for each available backend | Explicit settrace/monitoring comparison |
 | Prompt | every applicable entry/backend | partial input then Ctrl+C | Input must not execute; original outer frame must survive |
@@ -41,8 +41,9 @@ security-setting change, or privilege escalation is included in the candidate.
 | Thread | runcall, each available backend | debugger in worker thread × four commands | Verify SIGINT is handled by main, not silently attributed to worker |
 | Transport control | dedicated POSIX PTY | ISIG off then on | Writing a control byte alone must not count as signal delivery |
 
-On 3.15/main, public inline entries use monitoring; the native CLI keeps its
-default backend. `Pdb` construction exposes both backends. On older interpreters,
+On the locked 3.15/main sources, both the CLI and public inline entries use
+monitoring; the CLI constructor's own backend choice is read from installed
+source and checked at its actual prompt. `Pdb` construction exposes both backends. On older interpreters,
 the candidate records available capabilities and runs only native combinations.
 It never substitutes a backend by monkeypatching a public entrypoint.
 

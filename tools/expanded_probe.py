@@ -1,5 +1,6 @@
 """Bounded observational Pdb matrix. No debugger implementation is patched."""
 import argparse
+import ast
 import importlib.util
 import inspect
 import json
@@ -454,7 +455,7 @@ def matrix(full=True):
         spec = dict(kind=kind, entry=entry, backend=backend, scenario=scenario, command=command, policy=policy)
         spec["id"] = "-".join(spec.values())
         result.append(spec)
-    entries = [("cli", "settrace"), ("breakpoint", inline), ("set_trace", inline)] + [("runcall", b) for b in backends]
+    entries = [("cli", native_cli_backend()), ("breakpoint", inline), ("set_trace", inline)] + [("runcall", b) for b in backends]
     for entry, backend in entries:
         for scenario in ("busy", "sleep", "io"):
             for cmd in ("continue", "next", "until", "return"):
@@ -472,6 +473,19 @@ def matrix(full=True):
     if os.name != "nt":
         add("calibration", "none", "none")
     return result
+
+
+def native_cli_backend():
+    """Read the installed CLI's own constructor choice; never change it."""
+    import pdb
+    tree = ast.parse(inspect.getsource(pdb.main))
+    explicit = {kw.value.value for node in ast.walk(tree) if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name) and node.func.id == "Pdb"
+                for kw in node.keywords if kw.arg == "backend" and isinstance(kw.value, ast.Constant)
+                and kw.value.value in ("settrace", "monitoring")}
+    if len(explicit) > 1:
+        raise RuntimeError("CLI has multiple backend branches; explicit capability review needed")
+    return next(iter(explicit)) if explicit else (pdb.get_default_backend() if hasattr(pdb,"get_default_backend") else "settrace")
 
 
 def run_one(cfg):
@@ -540,7 +554,7 @@ def main():
     import pdb
     write_json(output / "capabilities.json", dict(version=sys.version,
          explicit_backend="backend" in inspect.signature(pdb.Pdb).parameters,
-         native_cli_backend="settrace",
+         native_cli_backend=native_cli_backend(),
          inline_backend="monitoring" if hasattr(pdb,"set_default_backend") else "settrace",
          excluded=[],
          deferred=["await pdb.set_trace_async entry", "ConPTY and GUI/IDE terminals", "unbounded C extensions"],

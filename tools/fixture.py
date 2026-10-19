@@ -90,7 +90,8 @@ def snapshot(label):
             instance = candidate
         if isinstance(candidate, pdb.Pdb) and frame.f_code.co_name == "interaction":
             postmortem = postmortem or (frame.f_locals.get("frame", "missing") is None
-                                       and frame.f_locals.get("traceback") is not None)
+                                       and (frame.f_locals.get("traceback") is not None
+                                            or frame.f_locals.get("tb_or_exc") is not None))
         active.append(dict(name=frame.f_code.co_name, line=frame.f_lineno,
                            file=frame.f_code.co_filename, id=id(frame)))
         frame = frame.f_back
