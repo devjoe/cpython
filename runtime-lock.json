@@ -1,0 +1,8 @@
+{
+  "official_repository": "https://github.com/python/cpython",
+  "main_sha": "999855b07f9b795ca88ac3349060a06c116a1037",
+  "main_observed_date_utc": "2026-10-19",
+  "release": "3.15.0",
+  "release_ref": "v3.15.0",
+  "purpose": "Immutable future main/release comparison; this file does not claim either runtime was executed locally"
+}

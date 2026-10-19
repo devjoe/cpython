@@ -1,0 +1,66 @@
+name: Expanded Pdb Ctrl-C observational matrix
+
+# Scoped to an independently authorized test branch in the fork.
+on:
+  push:
+    branches: ['pdb-ctrlc-expanded/**']
+    paths: ['tools/**', 'runtime-lock.json', '.github/workflows/pdb-ctrlc-expanded.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: expanded-pdb-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    if: github.repository == 'devjoe/cpython' && startsWith(github.ref, 'refs/heads/pdb-ctrlc-expanded/')
+    name: ${{ matrix.os }} / ${{ matrix.runtime }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-14]
+        runtime: [release, main]
+    steps:
+      - name: Check out standalone probe
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Bootstrap and released control interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.15.0'
+          allow-prereleases: false
+          check-latest: false
+      - name: Checkout immutable official main source
+        if: matrix.runtime == 'main'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: python/cpython
+          ref: 999855b07f9b795ca88ac3349060a06c116a1037
+          path: runtime-source
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Classifier contract checks
+        run: python -I tools/test_expanded.py
+      - name: Prepare exact runtime inside workspace (no system installation)
+        run: python -I tools/build_runtime.py --runtime ${{ matrix.runtime }}
+      - name: Observe bounded matrix; unwind alone is not a failing assertion
+        run: python -I tools/run_selected.py
+      - name: Preserve runner-only evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: expanded-${{ matrix.os }}-${{ matrix.runtime }}
+          path: |
+            expanded-results/
+            runtime-identity.json
+            runtime-lock.json
+          retention-days: 14
+          if-no-files-found: warn
