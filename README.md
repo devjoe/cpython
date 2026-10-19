@@ -47,14 +47,25 @@ source and checked at its actual prompt. `Pdb` construction exposes both backend
 the candidate records available capabilities and runs only native combinations.
 It never substitutes a backend by monkeypatching a public entrypoint.
 
-Expected modern coverage is **127 cases per POSIX job** and **126 per Windows
-job**, totaling 760 across the six future jobs. Counts are stratified, not a
+Expected modern coverage is **127 cases per job**, totaling 762 across the six
+full-matrix jobs. Counts are stratified, not a
 meaningless full Cartesian product. Windows partial-line cancellation uses the private console input buffer
 (CONIN$ plus WriteConsoleInputW) rather than pipe stdin. The console membership
 is checked before input injection, and Ctrl+C still uses CTRL_C_EVENT. Other
 Windows cases use pipe command input. Dedicated `await pdb.set_trace_async()`, ConPTY/IDE/GUI terminals,
 arbitrary C extensions, and a free-threaded build are deferred. Actual generated
 cases/capabilities are saved by each run.
+
+Windows also has one plain `input()` control without Pdb. It measures the same
+native control event while console input is incomplete. If input does not return
+within 350 ms, only this control completes the input line and records whether
+KeyboardInterrupt was deferred until then. This intervention is never applied
+to a Pdb cancellation case. A delivered event is not treated as a physical
+keyboard cancellation, and failed Pdb prompt contracts remain failed.
+
+For one bounded repair pass, a commit marked `[targeted-repair]` selects only
+the two Windows plain-input controls and macOS main. Ordinary commits keep the
+full six-job matrix. This avoids recompiling/repeating already collected layers.
 
 ## Signal isolation and limits
 

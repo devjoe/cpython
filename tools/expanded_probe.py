@@ -192,7 +192,7 @@ class WindowsSession(Dialogue):
             raise RuntimeError(f"Helper console not exclusive: {before}")
         if not self.api.SetConsoleCtrlHandler(None, True):
             raise RuntimeError("Cannot isolate helper from Ctrl+C")
-        self.console_input = native.NativeConsoleInput(self.api) if cfg['kind'] == 'prompt_cancel' else None
+        self.console_input = native.NativeConsoleInput(self.api) if cfg['kind'] in ('prompt_cancel','plain_input') else None
         self.process = subprocess.Popen(command(cfg), cwd=self.root, env=environment(self.root),
                          stdin=self.console_input.stream if self.console_input else subprocess.PIPE,
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -297,6 +297,14 @@ def classify(cfg, data, signals):
         return dict(result, observation="NO_SIGNAL_RECEIPT", contract="infrastructure")
     if kind == "calibration":
         return dict(result, observation="ISIG_OFF_NO_SIGNAL_THEN_ISIG_ON_SIGNAL", contract="match")
+    if kind == "plain_input":
+        cancelled = named("plain_input_cancelled")
+        if cancelled:
+            label = ("PLAIN_CONSOLE_INPUT_DEFERRED_UNTIL_LINE_COMPLETION" if cancelled[-1]["after_line_completion"]
+                     else "PLAIN_CONSOLE_INPUT_CANCELLED_PROMPTLY")
+        else:
+            label = "PLAIN_CONSOLE_INPUT_RETURNED_WITHOUT_KEYBOARD_INTERRUPT"
+        return dict(result, observation=label)
     if kind == "worker_thread":
         main = named("fixture_started")[0]["main_thread"]
         interrupts = named("main_thread_interrupt")
@@ -359,7 +367,21 @@ def execute_case(cfg, session):
     result = {k: cfg[k] for k in ("id", "entry", "backend", "scenario", "command", "kind", "policy")}
     cfg["child_pid"] = session.pid
     try:
-        if cfg["kind"] == "calibration":
+        if cfg["kind"] == "plain_input":
+            wait_event(root,"plain_input_ready",session)
+            session.send(b"UNSUBMITTED_INPUT")
+            time.sleep(0.1)
+            session.interrupt()
+            deadline=time.monotonic()+0.35
+            while not event_rows(root,"plain_input_cancelled") and time.monotonic()<deadline:
+                session.pump(0.01)
+            if not event_rows(root,"plain_input_cancelled"):
+                # Plain-input baseline only; never unblock Pdb input to pass it.
+                (root/"input-line-completed").touch()
+                session.send(b"\n")
+            wait_event(root,"program_end",session)
+            time.sleep(0.08)
+        elif cfg["kind"] == "calibration":
             import termios
             wait_event(root, "calibration_ready", session)
             session.terminal()
@@ -472,6 +494,8 @@ def matrix(full=True):
                     add("policy", "runcall", backend, "busy", cmd, policy)
     if os.name != "nt":
         add("calibration", "none", "none")
+    else:
+        add("plain_input", "none", "none", "io")
     return result
 
 

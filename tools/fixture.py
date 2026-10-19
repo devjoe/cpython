@@ -235,7 +235,17 @@ if os.name != "nt":
     emit("terminal_ready", sid=os.getsid(0), pgid=os.getpgrp(), foreground=os.tcgetpgrp(0),
          isig=bool(attrs[3] & termios.ISIG), vintr=list(attrs[6][termios.VINTR]))
 install_observer()
-if CFG["kind"] == "calibration":
+if CFG["kind"] == "plain_input":
+    emit("plain_input_ready")
+    try:
+        input()
+    except KeyboardInterrupt:
+        emit("plain_input_cancelled", after_line_completion=(ROOT / "input-line-completed").exists())
+    else:
+        emit("plain_input_returned", after_line_completion=(ROOT / "input-line-completed").exists())
+    emit("program_end")
+    time.sleep(0.04)
+elif CFG["kind"] == "calibration":
     def calibration(signum, frame):
         emit("calibration_received", signal=signum)
         STATE["release"] = True

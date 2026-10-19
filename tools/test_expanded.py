@@ -3,6 +3,8 @@ import copy
 import importlib.util
 from pathlib import Path
 import signal
+import os
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location("expanded", Path(__file__).with_name("expanded_probe.py"))
@@ -29,6 +31,32 @@ class ContractGuards(unittest.TestCase):
         result = probe.classify(cfg,data,ack)
         self.assertEqual(result["observation"],"LIVE_ORIGINAL_FRAME_RESUMED")
         self.assertEqual(result["contract"],"observation")
+
+
+class BuildSelectionGuards(unittest.TestCase):
+    def test_directory_named_python_is_not_an_executable(self):
+        path = Path(__file__).with_name("build_runtime.py")
+        spec = importlib.util.spec_from_file_location("runtime_builder", path)
+        builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(builder)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "python").mkdir()
+            binary = root / "python.exe"
+            binary.write_text("disposable test placeholder")
+            binary.chmod(0o700)
+            self.assertEqual(builder.posix_build_executable(root), binary)
+
+    def test_missing_binary_reports_build_limitation(self):
+        path = Path(__file__).with_name("build_runtime.py")
+        spec = importlib.util.spec_from_file_location("runtime_builder", path)
+        builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(builder)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "python").mkdir()
+            with self.assertRaises(RuntimeError):
+                builder.posix_build_executable(root)
 
     def test_no_ack_is_infrastructure(self):
         cfg,data,_ = example()

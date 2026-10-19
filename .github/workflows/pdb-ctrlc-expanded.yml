@@ -24,8 +24,9 @@ jobs:
       fail-fast: false
       max-parallel: 3
       matrix:
-        os: [ubuntu-22.04, windows-2022, macos-14]
-        runtime: [release, main]
+        # A bounded repair pass adds plain-console controls and fixes only the
+        # macOS main binary path. Ordinary commits retain the full six jobs.
+        include: ${{ fromJSON(contains(github.event.head_commit.message, '[targeted-repair]') && '[{"os":"windows-2022","runtime":"release","select":"plain_input"},{"os":"windows-2022","runtime":"main","select":"plain_input"},{"os":"macos-14","runtime":"main","select":""}]' || '[{"os":"ubuntu-22.04","runtime":"release","select":""},{"os":"ubuntu-22.04","runtime":"main","select":""},{"os":"windows-2022","runtime":"release","select":""},{"os":"windows-2022","runtime":"main","select":""},{"os":"macos-14","runtime":"release","select":""},{"os":"macos-14","runtime":"main","select":""}]') }}
     steps:
       - name: Check out standalone probe
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -53,6 +54,8 @@ jobs:
         run: python -I tools/build_runtime.py --runtime ${{ matrix.runtime }}
       - name: Observe bounded matrix; unwind alone is not a failing assertion
         run: python -I tools/run_selected.py
+        env:
+          PROBE_SELECT: ${{ matrix.select }}
       - name: Preserve runner-only evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

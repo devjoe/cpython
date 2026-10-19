@@ -15,6 +15,15 @@ def run(args, cwd=None, timeout=180):
     subprocess.run(args, cwd=cwd, check=True, timeout=timeout)
 
 
+def posix_build_executable(source):
+    for candidate in (source / "python", source / "python.exe"):
+        # On case-insensitive macOS, "python" can resolve to the source
+        # directory Python/. Existence alone does not identify a runnable file.
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    raise RuntimeError("No executable Python binary produced in the source tree")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", choices=("release", "main"), required=True)
@@ -41,9 +50,7 @@ def main():
         else:
             run(["./configure", "--without-ensurepip", "--disable-test-modules"], cwd=source)
             run(["make", "-j2"], cwd=source, timeout=900)
-            executable = source / "python"
-            if not executable.exists():
-                executable = source / "python.exe"  # Case-insensitive macOS checkout.
+            executable = posix_build_executable(source)
         identity = dict(kind="main", expected_source_sha=LOCK["main_sha"], actual_source_sha=sha,
                         pdb_source_sha256=hashlib.sha256((source / "Lib/pdb.py").read_bytes()).hexdigest())
     code = "import sys,pdb,json;print(json.dumps({'version':sys.version,'pdb':pdb.__file__,'git':getattr(sys,'_git',None)}))"
