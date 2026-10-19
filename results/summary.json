@@ -1,0 +1,333 @@
+{
+  "schema": 1,
+  "repository": "devjoe/cpython",
+  "branch": "pdb-ctrlc-expanded/20261019-065702",
+  "official_main_sha": "999855b07f9b795ca88ac3349060a06c116a1037",
+  "released_control": "3.15.0",
+  "selected_cases": 762,
+  "signal_receipts_independently_verified": 762,
+  "contracts": {
+    "observation": 410,
+    "match": 342,
+    "mismatch": 10
+  },
+  "observations": {
+    "LIVE_ORIGINAL_FRAME_RESUMED": 126,
+    "UNWIND_PROPAGATED": 402,
+    "PROMPT_CANCELLED_FRAME_PRESERVED": 20,
+    "EVAL_CANCELLED_DEBUGGEE_PRESERVED": 30,
+    "MAIN_THREAD_SIGINT_WORKER_NOT_TARGETED": 48,
+    "CUSTOM_HANDLER_COMPLETED_WITHOUT_INTERRUPT_STOP": 84,
+    "ASYNC_TASK_CANCELLED": 36,
+    "ISIG_OFF_NO_SIGNAL_THEN_ISIG_ON_SIGNAL": 4,
+    "CANCELLATION_CONTRACT_MISMATCH": 10,
+    "PLAIN_CONSOLE_INPUT_DEFERRED_UNTIL_LINE_COMPLETION": 2
+  },
+  "matrix": [
+    {
+      "os": "ubuntu-22.04",
+      "runtime": "release",
+      "actual_version": "3.15.0 (main, Oct 10 2026, 18:52:37) [GCC 11.4.0]",
+      "cases": 127,
+      "contracts": {
+        "observation": 68,
+        "match": 59
+      },
+      "observations": {
+        "LIVE_ORIGINAL_FRAME_RESUMED": 21,
+        "UNWIND_PROPAGATED": 67,
+        "PROMPT_CANCELLED_FRAME_PRESERVED": 5,
+        "EVAL_CANCELLED_DEBUGGEE_PRESERVED": 5,
+        "MAIN_THREAD_SIGINT_WORKER_NOT_TARGETED": 8,
+        "CUSTOM_HANDLER_COMPLETED_WITHOUT_INTERRUPT_STOP": 14,
+        "ASYNC_TASK_CANCELLED": 6,
+        "ISIG_OFF_NO_SIGNAL_THEN_ISIG_ON_SIGNAL": 1
+      },
+      "core_commands": {
+        "continue": {
+          "LIVE_ORIGINAL_FRAME_RESUMED": 15
+        },
+        "next": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "until": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "return": {
+          "UNWIND_PROPAGATED": 15
+        }
+      },
+      "postmortem_observed": 9,
+      "sources": [
+        {
+          "run_id": 39214091558,
+          "harness_commit": "850b54a27d1da6457acd1c383a046fd8fdcfef5b",
+          "artifact_id": 12168707093,
+          "artifact_sha256": "791397cd78171c6fb971ad6821832e67c5bf1de4cd006ccea08940c2fa548668",
+          "artifact_url": "https://github.com/devjoe/cpython/actions/runs/39214091558/artifacts/12168707093"
+        }
+      ]
+    },
+    {
+      "os": "ubuntu-22.04",
+      "runtime": "main",
+      "actual_version": "3.16.0a1+dev (999855b:999855b, Oct 19 2026, 07:10:37) [GCC 11.4.0]",
+      "cases": 127,
+      "contracts": {
+        "observation": 68,
+        "match": 59
+      },
+      "observations": {
+        "LIVE_ORIGINAL_FRAME_RESUMED": 21,
+        "UNWIND_PROPAGATED": 67,
+        "PROMPT_CANCELLED_FRAME_PRESERVED": 5,
+        "EVAL_CANCELLED_DEBUGGEE_PRESERVED": 5,
+        "MAIN_THREAD_SIGINT_WORKER_NOT_TARGETED": 8,
+        "CUSTOM_HANDLER_COMPLETED_WITHOUT_INTERRUPT_STOP": 14,
+        "ASYNC_TASK_CANCELLED": 6,
+        "ISIG_OFF_NO_SIGNAL_THEN_ISIG_ON_SIGNAL": 1
+      },
+      "core_commands": {
+        "continue": {
+          "LIVE_ORIGINAL_FRAME_RESUMED": 15
+        },
+        "next": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "until": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "return": {
+          "UNWIND_PROPAGATED": 15
+        }
+      },
+      "postmortem_observed": 9,
+      "sources": [
+        {
+          "run_id": 39214091558,
+          "harness_commit": "850b54a27d1da6457acd1c383a046fd8fdcfef5b",
+          "artifact_id": 12168608972,
+          "artifact_sha256": "f2c47987cf3b3075e1c3e799c139c35a934aab8df7cadfdfb379095dd985c922",
+          "artifact_url": "https://github.com/devjoe/cpython/actions/runs/39214091558/artifacts/12168608972"
+        }
+      ]
+    },
+    {
+      "os": "macos-14",
+      "runtime": "release",
+      "actual_version": "3.15.0 (v3.15.0:d220409a13b, Oct  9 2026, 08:17:44) [Clang 21.0.0 (clang-2100.1.1.101)]",
+      "cases": 127,
+      "contracts": {
+        "observation": 68,
+        "match": 59
+      },
+      "observations": {
+        "LIVE_ORIGINAL_FRAME_RESUMED": 21,
+        "UNWIND_PROPAGATED": 67,
+        "PROMPT_CANCELLED_FRAME_PRESERVED": 5,
+        "EVAL_CANCELLED_DEBUGGEE_PRESERVED": 5,
+        "MAIN_THREAD_SIGINT_WORKER_NOT_TARGETED": 8,
+        "CUSTOM_HANDLER_COMPLETED_WITHOUT_INTERRUPT_STOP": 14,
+        "ASYNC_TASK_CANCELLED": 6,
+        "ISIG_OFF_NO_SIGNAL_THEN_ISIG_ON_SIGNAL": 1
+      },
+      "core_commands": {
+        "continue": {
+          "LIVE_ORIGINAL_FRAME_RESUMED": 15
+        },
+        "next": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "until": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "return": {
+          "UNWIND_PROPAGATED": 15
+        }
+      },
+      "postmortem_observed": 9,
+      "sources": [
+        {
+          "run_id": 39214091558,
+          "harness_commit": "850b54a27d1da6457acd1c383a046fd8fdcfef5b",
+          "artifact_id": 12168897935,
+          "artifact_sha256": "07694c5639ab80a5ecd2373978f3b3f9414901f2888c542829d0dfd30744e15a",
+          "artifact_url": "https://github.com/devjoe/cpython/actions/runs/39214091558/artifacts/12168897935"
+        }
+      ]
+    },
+    {
+      "os": "macos-14",
+      "runtime": "main",
+      "actual_version": "3.16.0a1+dev (999855b:999855b, Oct 19 2026, 07:20:32) [Clang 15.0.0 (clang-1500.3.9.4)]",
+      "cases": 127,
+      "contracts": {
+        "observation": 68,
+        "match": 59
+      },
+      "observations": {
+        "LIVE_ORIGINAL_FRAME_RESUMED": 21,
+        "UNWIND_PROPAGATED": 67,
+        "PROMPT_CANCELLED_FRAME_PRESERVED": 5,
+        "EVAL_CANCELLED_DEBUGGEE_PRESERVED": 5,
+        "MAIN_THREAD_SIGINT_WORKER_NOT_TARGETED": 8,
+        "CUSTOM_HANDLER_COMPLETED_WITHOUT_INTERRUPT_STOP": 14,
+        "ASYNC_TASK_CANCELLED": 6,
+        "ISIG_OFF_NO_SIGNAL_THEN_ISIG_ON_SIGNAL": 1
+      },
+      "core_commands": {
+        "continue": {
+          "LIVE_ORIGINAL_FRAME_RESUMED": 15
+        },
+        "next": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "until": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "return": {
+          "UNWIND_PROPAGATED": 15
+        }
+      },
+      "postmortem_observed": 9,
+      "sources": [
+        {
+          "run_id": 39215008169,
+          "harness_commit": "8e42c332c62398ff1ff5df28f6cded72a05040f5",
+          "artifact_id": 12169263027,
+          "artifact_sha256": "556dedc9d0e4b15420659d431b4d55f182fddea540f7e171feea0bb1c73eab0c",
+          "artifact_url": "https://github.com/devjoe/cpython/actions/runs/39215008169/artifacts/12169263027"
+        }
+      ]
+    },
+    {
+      "os": "windows-2022",
+      "runtime": "release",
+      "actual_version": "3.15.0 (tags/v3.15.0:d220409, Oct  9 2026, 11:55:56) [MSC v.1951 64 bit (AMD64)]",
+      "cases": 127,
+      "contracts": {
+        "observation": 69,
+        "mismatch": 5,
+        "match": 53
+      },
+      "observations": {
+        "LIVE_ORIGINAL_FRAME_RESUMED": 21,
+        "UNWIND_PROPAGATED": 67,
+        "CANCELLATION_CONTRACT_MISMATCH": 5,
+        "EVAL_CANCELLED_DEBUGGEE_PRESERVED": 5,
+        "MAIN_THREAD_SIGINT_WORKER_NOT_TARGETED": 8,
+        "CUSTOM_HANDLER_COMPLETED_WITHOUT_INTERRUPT_STOP": 14,
+        "ASYNC_TASK_CANCELLED": 6,
+        "PLAIN_CONSOLE_INPUT_DEFERRED_UNTIL_LINE_COMPLETION": 1
+      },
+      "core_commands": {
+        "continue": {
+          "LIVE_ORIGINAL_FRAME_RESUMED": 15
+        },
+        "next": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "until": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "return": {
+          "UNWIND_PROPAGATED": 15
+        }
+      },
+      "postmortem_observed": 9,
+      "sources": [
+        {
+          "run_id": 39214091558,
+          "harness_commit": "850b54a27d1da6457acd1c383a046fd8fdcfef5b",
+          "artifact_id": 12168069436,
+          "artifact_sha256": "5bd7eb8d2fcef15d70221075a1b78d429ad276d9b1e556796798ea78ff5a71f5",
+          "artifact_url": "https://github.com/devjoe/cpython/actions/runs/39214091558/artifacts/12168069436"
+        },
+        {
+          "run_id": 39215008169,
+          "harness_commit": "8e42c332c62398ff1ff5df28f6cded72a05040f5",
+          "artifact_id": 12168259656,
+          "artifact_sha256": "e863d8d2e98b8976d9163048a70b173e8303a50c178b2242a3a4255c75b9c2bb",
+          "artifact_url": "https://github.com/devjoe/cpython/actions/runs/39215008169/artifacts/12168259656"
+        }
+      ]
+    },
+    {
+      "os": "windows-2022",
+      "runtime": "main",
+      "actual_version": "3.16.0a1+dev (999855b:999855b, Oct 19 2026, 07:20:00) [MSC v.1944 64 bit (AMD64)]",
+      "cases": 127,
+      "contracts": {
+        "observation": 69,
+        "mismatch": 5,
+        "match": 53
+      },
+      "observations": {
+        "LIVE_ORIGINAL_FRAME_RESUMED": 21,
+        "UNWIND_PROPAGATED": 67,
+        "CANCELLATION_CONTRACT_MISMATCH": 5,
+        "EVAL_CANCELLED_DEBUGGEE_PRESERVED": 5,
+        "MAIN_THREAD_SIGINT_WORKER_NOT_TARGETED": 8,
+        "CUSTOM_HANDLER_COMPLETED_WITHOUT_INTERRUPT_STOP": 14,
+        "ASYNC_TASK_CANCELLED": 6,
+        "PLAIN_CONSOLE_INPUT_DEFERRED_UNTIL_LINE_COMPLETION": 1
+      },
+      "core_commands": {
+        "continue": {
+          "LIVE_ORIGINAL_FRAME_RESUMED": 15
+        },
+        "next": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "until": {
+          "UNWIND_PROPAGATED": 15
+        },
+        "return": {
+          "UNWIND_PROPAGATED": 15
+        }
+      },
+      "postmortem_observed": 9,
+      "sources": [
+        {
+          "run_id": 39214091558,
+          "harness_commit": "850b54a27d1da6457acd1c383a046fd8fdcfef5b",
+          "artifact_id": 12169650448,
+          "artifact_sha256": "8fa3b647737d860ac8a8d0954176642f35891f93d956fb009fbbe7f290469f37",
+          "artifact_url": "https://github.com/devjoe/cpython/actions/runs/39214091558/artifacts/12169650448"
+        },
+        {
+          "run_id": 39215008169,
+          "harness_commit": "8e42c332c62398ff1ff5df28f6cded72a05040f5",
+          "artifact_id": 12168434819,
+          "artifact_sha256": "26cf4e170133a1681c735783d912b1b685e0cf121b66b1077e8d0c120ce9b3fa",
+          "artifact_url": "https://github.com/devjoe/cpython/actions/runs/39215008169/artifacts/12168434819"
+        }
+      ]
+    }
+  ],
+  "method_limits": [
+    "Unwind is an observation, not a universal bug verdict; custom handlers, nosigint, asyncio cancellation and main-thread ownership have distinct contracts.",
+    "Windows CTRL_C_EVENT reached the private-console worker, but five Pdb prompt cases per runtime remained blocked in console input. These remain contract mismatches.",
+    "The same native control event without Pdb deferred KeyboardInterrupt until line completion in both Windows runtimes. This does not establish physical keyboard or ConPTY cancellation behavior.",
+    "Dedicated await pdb.set_trace_async(), GUI/IDE terminals and arbitrary unbounded C extensions were not tested."
+  ],
+  "provenance": {
+    "runs": [
+      {
+        "id": 39213422200,
+        "purpose": "Initial run retained with harness failures; excluded from selected results"
+      },
+      {
+        "id": 39214091558,
+        "purpose": "Full repaired matrix; macOS main setup failure excluded in favor of targeted run"
+      },
+      {
+        "id": 39215008169,
+        "purpose": "Only macOS main and two plain Windows input controls"
+      }
+    ],
+    "artifacts_downloaded_and_digest_verified": 15,
+    "source_hashes_verified_per_case": true,
+    "windows_source_line_endings": "CRLF hashes verified against reviewed LF source"
+  }
+}

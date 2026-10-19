@@ -155,3 +155,12 @@ actual 3.15/main, macOS, or Windows execution.
 - [Locked main Pdb source](https://github.com/python/cpython/blob/999855b07f9b795ca88ac3349060a06c116a1037/Lib/pdb.py)
 - [GenerateConsoleCtrlEvent](https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent)
 - [Creation of a Console](https://learn.microsoft.com/en-us/windows/console/creation-of-a-console)
+
+## Hosted-runner observations
+
+The deidentified [summary](results/summary.json) and [case index](results/cases.json)
+record 762 selected cases with artifact digests and tested harness commits.
+The summary preserves the ten Windows prompt contract mismatches and separates
+them from plain-console input deferral, semantic observations, and matched
+contracts. A successful observational job does not mean every command preserves
+a live frame. Initial harness failures remain in the linked earlier runs.
