@@ -205,7 +205,7 @@ def compare(args):
                 raise RuntimeError('Executed Pdb source hash differs from phase')
             if report['test_pdb_sha256'] != digest(tests):
                 raise RuntimeError('Regression tests differ between phases')
-            if len(report['cases']) != 131 or report['methods_run'] != 18:
+            if len(report['cases']) != 137 or report['methods_run'] != 19:
                 raise RuntimeError('Regression case or method count changed')
             if {c['parameters']['backend'] for c in report['cases']} != {'settrace', 'monitoring'}:
                 raise RuntimeError('Both backends were not exercised')

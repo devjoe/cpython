@@ -18,9 +18,9 @@ No native source or Bdb implementation changes. JSON reports verify the actual
 interpreter, source SHA, Pdb/test hashes, unchanged handler body, and both
 backends. There is no system Python installation.
 
-There are 18 test methods and 131 explicitly recorded cases. The baseline
-contract predicts 61 assertion failures and 70 passing controls. The candidate
-must pass all 131 with no errors or skips. A baseline error, missing case,
+There are 19 test methods and 137 explicitly recorded cases. The baseline
+contract predicts 61 assertion failures and 76 passing controls. The candidate
+must pass all 137 with no errors or skips. A baseline error, missing case,
 unexpected pass/failure, or source mismatch is not accepted as reproduction.
 The candidate then runs the complete `test_pdb` and `test_bdb` suites. Their
 ordinary platform/dependency skips remain visible in the logs and JUnit XML.
@@ -44,6 +44,10 @@ Merely sharing the old install block is insufficient while tracing is active:
 switching to stepping can stop inside calls made by the signal handler itself.
 A small private entry point stops tracing before invoking the existing public
 `sigint_handler`, whose body and message remain unchanged.
+It preserves tracing when `allow_kbdint` is true: Ctrl-C arriving after a resume
+command has installed its handler but before the command loop exits must cancel
+the command without disabling later stepping. A deterministic command-return
+injection checks that window on both backends.
 
 The exact installed bound-method object is tracked through `weakref.ref`, not
 `WeakMethod` (which recreates bound methods). This preserves identity comparisons

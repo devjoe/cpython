@@ -662,7 +662,8 @@ class Pdb(bdb.Bdb, cmd.Cmd):
 
     def _sigint_handler(self, signum, frame):
         # Switching to stepping must not trace calls made by the handler itself.
-        self.stop_trace()
+        if not self.allow_kbdint:
+            self.stop_trace()
         self.sigint_handler(signum, frame)
 
     def reset(self):

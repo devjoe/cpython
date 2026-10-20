@@ -3883,6 +3883,37 @@ class PdbSigintTests(unittest.TestCase):
                     self.assertIn('--KeyboardInterrupt--' if prompt else
                                   '*** KeyboardInterrupt', output.getvalue())
 
+    def test_sigint_after_resume_command_at_prompt(self):
+        def function():
+            value = 1
+            value = 2
+            return value
+
+        for backend in ('settrace', 'monitoring'):
+            for command, value in (('next', 1), ('unt', 1), ('return', 2)):
+                with self.subTest(backend=backend, command=command):
+                    debugger, output = self.make_pdb(backend, [
+                        'next', command, "p ('AFTER-WINDOW', value)", 'continue',
+                    ])
+                    onecmd = debugger.onecmd
+                    interrupted = []
+
+                    def interrupt_after_command(line):
+                        result = onecmd(line)
+                        if line == 'next' and not interrupted:
+                            handler = signal.getsignal(signal.SIGINT)
+                            owned = getattr(handler, '__self__', None) is debugger
+                            interrupted.append((debugger.allow_kbdint, owned))
+                            signal.raise_signal(signal.SIGINT)
+                        return result
+
+                    with patch.object(debugger, 'onecmd', interrupt_after_command):
+                        self.assertEqual(self.run_debuggee(debugger, function), 2)
+                    self.assertEqual([item[0] for item in interrupted], [True])
+                    self.assertIn('--KeyboardInterrupt--', output.getvalue())
+                    self.assertIn(f"('AFTER-WINDOW', {value})", output.getvalue(),
+                                  f'interrupt window state: {interrupted!r}')
+
     def test_sigint_recursive_debug(self):
         def callee():
             marker = 'inner'
