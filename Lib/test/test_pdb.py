@@ -3680,7 +3680,8 @@ class PdbSigintTests(unittest.TestCase):
                         debugger, _ = self.make_pdb(backend, ['quit'])
                         debugger.reset()
                         frame = sys._getframe()
-                        debugger.curframe = debugger.botframe = frame
+                        debugger.curframe = frame
+                        debugger.botframe = frame.f_back
                         debugger.onecmd(command)
                         self.assertIs(getattr(signal.getsignal(signal.SIGINT),
                                               '__self__', None), debugger)
@@ -3698,7 +3699,8 @@ class PdbSigintTests(unittest.TestCase):
                     debugger, _ = self.make_pdb(backend, ['quit'])
                     debugger.reset()
                     frame = sys._getframe()
-                    debugger.curframe = debugger.botframe = frame
+                    debugger.curframe = frame
+                    debugger.botframe = frame.f_back
                     debugger.onecmd(command)
                     signal.signal(signal.SIGINT, replacement)
                     debugger.interaction(frame, None)
@@ -3706,7 +3708,8 @@ class PdbSigintTests(unittest.TestCase):
                     # A later session must not restore the now-stale handler.
                     other, _ = self.make_pdb(backend, ['quit'])
                     other.reset()
-                    other.curframe = other.botframe = frame
+                    other.curframe = frame
+                    other.botframe = frame.f_back
                     other.onecmd(command)
                     other.interaction(frame, None)
                     self.assertIs(signal.getsignal(signal.SIGINT), replacement)
@@ -3719,7 +3722,8 @@ class PdbSigintTests(unittest.TestCase):
                 frame = sys._getframe()
                 for debugger in (first, first, second):
                     debugger.reset()
-                    debugger.curframe = debugger.botframe = frame
+                    debugger.curframe = frame
+                    debugger.botframe = frame.f_back
                     debugger.onecmd('next')
                 second.interaction(frame, None)
                 self.assertIs(signal.getsignal(signal.SIGINT),
@@ -3784,7 +3788,8 @@ class PdbSigintTests(unittest.TestCase):
                                                   nosigint=nosigint)
                         debugger.reset()
                         frame = sys._getframe()
-                        debugger.curframe = debugger.botframe = frame
+                        debugger.curframe = frame
+                        debugger.botframe = frame.f_back
                         debugger.onecmd(command)
                         self.assertIs(signal.getsignal(signal.SIGINT),
                                       signal.default_int_handler)
@@ -3963,6 +3968,19 @@ class PdbSigintTests(unittest.TestCase):
                 self.assertEqual(self.run_debuggee(debugger, function), 42)
                 self.assertEqual(calls, ['custom'])
                 self.assertIn("'SUBCLASS-BREAKPOINT'", output.getvalue())
+
+    def test_sigint_up_to_untraced_boundary(self):
+        def function():
+            return 42
+
+        for backend in ('settrace', 'monitoring'):
+            for command in ('next', 'until', 'return'):
+                with self.subTest(backend=backend, command=command):
+                    debugger, output = self.make_pdb(backend, ['up', command])
+                    self.assertEqual(self.run_debuggee(debugger, function), 42,
+                                     output.getvalue())
+                    self.assertIs(signal.getsignal(signal.SIGINT),
+                                  signal.default_int_handler, output.getvalue())
 
     def test_sigint_post_mortem(self):
         for backend in ('settrace', 'monitoring'):

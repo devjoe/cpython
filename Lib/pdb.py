@@ -638,13 +638,16 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         if self.allow_kbdint:
             raise KeyboardInterrupt
         self.message("\nProgram interrupted. (Use 'cont' to resume).")
+        # set_trace() must stop tracing before changing the stop state.
         self.set_trace(frame)
 
     def _install_sigint_handler(self, *, stepping=False):
         if self.nosigint:
             return
-        # Do not leave a new handler behind when stepping cannot resume.
+        # Avoid common stepping paths without another debuggee stop.
         if stepping and (self.botframe is None or
+                         (self.curframe is self.botframe and
+                          self.botframe.f_trace is None) or
                          (self.frame_returning is not None and
                           self.frame_returning.f_back is self.botframe)):
             return

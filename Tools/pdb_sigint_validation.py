@@ -183,11 +183,14 @@ def compare(args):
             source_bytes(source / 'Lib/bdb.py') != bdb_original):
         raise RuntimeError('Bdb differs from the baseline')
     handler = lambda data: data.split(b'\n    def sigint_handler(', 1)[1].split(b'\n    def ', 1)[0]
-    expected_handler = handler(original).replace(b'        self.set_step()\n', b'')
+    expected_handler = handler(original).replace(
+        b'        self.set_step()\n',
+        b'        # set_trace() must stop tracing before changing the stop state.\n')
     if handler(candidate) != expected_handler:
-        raise RuntimeError('sigint_handler differs beyond removing redundant set_step')
+        raise RuntimeError(
+            'sigint_handler differs beyond removing eager set_step and explaining it')
     summary = {'base_sha': BASE, 'same_native_build': True,
-               'sigint_handler_change': 'remove redundant set_step only',
+               'sigint_handler_change': 'remove eager set_step before set_trace',
                'bdb_sha256_git_lf': digest(bdb_original),
                'bdb_sha256_raw': digest((source / 'Lib/bdb.py').read_bytes()),
                'phases': {}}
@@ -206,7 +209,7 @@ def compare(args):
                 raise RuntimeError('Executed Pdb source hash differs from phase')
             if report['test_pdb_sha256'] != digest(tests):
                 raise RuntimeError('Regression tests differ between phases')
-            if len(report['cases']) != 151 or report['methods_run'] != 22:
+            if len(report['cases']) != 157 or report['methods_run'] != 23:
                 raise RuntimeError('Regression case or method count changed')
             if {c['parameters']['backend'] for c in report['cases']} != {'settrace', 'monitoring'}:
                 raise RuntimeError('Both backends were not exercised')

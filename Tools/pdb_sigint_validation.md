@@ -15,12 +15,12 @@ The three jobs use standard Linux, macOS, and Windows runners. Each builds the
 same immutable native baseline once. The regression tests are overlaid for
 both phases; only `Lib/pdb.py` changes between baseline and candidate runs.
 No native source or Bdb implementation changes. JSON reports verify the actual
-interpreter, source SHA, Pdb/test hashes, the one-line handler simplification,
+interpreter, source SHA, Pdb/test hashes, the signal-handler change,
 and both backends. There is no system Python installation.
 
-There are 22 test methods and 151 explicitly recorded cases. The baseline
-contract predicts 59 assertion failures and 92 passing controls. The candidate
-must pass all 151 with no errors or skips. A baseline error, missing case,
+There are 23 test methods and 157 explicitly recorded cases. The baseline
+contract predicts 59 assertion failures and 98 passing controls. The candidate
+must pass all 157 with no errors or skips. A baseline error, missing case,
 unexpected pass/failure, or source mismatch is not accepted as reproduction.
 The candidate then runs the complete `test_pdb`, `test_bdb`, and
 `test_remote_pdb` suites. Their ordinary platform/dependency skips remain visible
@@ -43,7 +43,7 @@ retain the real CLI entry point and reject a pre-existing home/source `.pdbrc`.
 
 Merely sharing the old install block is insufficient while tracing is active:
 the old handler calls `set_step()` before `set_trace()`, which can stop inside
-Bdb. Removing that redundant `set_step()` avoids changing the stop state before
+Bdb. Removing that eager `set_step()` avoids changing the stop state before
 `Bdb.set_trace()` stops tracing, resets the state, and enables instruction
 stepping. No wrapper is needed, and overriding `sigint_handler` does not
 implicitly disable tracing. Both the resume-command prompt window and the
@@ -55,8 +55,9 @@ without retaining a debugger after the debuggee replaces its handler. A lifetime
 test passes on the baseline, fails with a strong reference, and passes with the
 weak reference.
 
-The three new commands avoid installing a handler in post-mortem debugging
-or when stepping out of the last frame of a run session. This guard does not
+The three new commands avoid installing a handler through the post-mortem API,
+at an untraced run boundary selected with `up`, or when stepping out of the last
+frame of a run session. This guard does not
 apply to `continue`: inline debugging can still have live module code after a
 return stop. Native inline tests check an actual resumable module-frame pause;
 post-mortem tests check that the default handler remains installed. Metadata
@@ -97,3 +98,18 @@ Artifacts include build logs, phase-by-phase case JSON and logs, an aggregate
 contract summary, and complete suite output/JUnit XML. Only fresh hosted-runner
 evidence is uploaded. No private machine logs, environment dump, credentials,
 or conversation transcript is part of this branch or its artifacts.
+
+## Follow-up after independent review
+
+Opus reviewed commit `97c5822401df7d802eb937e240fc40eabaf6cf87` and reported
+no definite blocking issue. Its `up`-to-untraced-boundary example reproduced
+handler residue on both backends. The follow-up adds a narrowly scoped guard
+and six behavior cases; the reviewed commit fails all six. These later changes
+are not claimed to have been reviewed by Opus.
+
+The guard remains conservative at inline return boundaries. It is not a full
+handler-lifetime model. CLI post-mortem calls `interaction` directly without
+the API's reset, so its restart window can still retain a handler. The API
+documentation is intentionally narrower. Recursive `debug` still uses its
+existing `nosigint` default, and initial `continue` paths that never return to a
+prompt retain their existing lifetime limitation. These are follow-up topics.
