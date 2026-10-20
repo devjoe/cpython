@@ -118,6 +118,8 @@ def targeted(args):
         unittest.defaultTestLoader.loadTestsFromTestCase(test_pdb.PdbSigintTests),
         unittest.defaultTestLoader.loadTestsFromName(
             'test.test_pdb.PdbTestCase.test_sigint_cli_resume_commands'),
+        unittest.defaultTestLoader.loadTestsFromName(
+            'test.test_pdb.PdbTestInline.test_sigint_after_inline_return'),
     ])
     result = unittest.TextTestRunner(verbosity=2, resultclass=CaseResult).run(suite)
     write_json(args.output, {
@@ -153,8 +155,6 @@ def baseline_failure(case):
         return params['command'] == 'continue'
     if name == 'test_sigint_handler_restored':
         return params['command'] != 'continue' or params['handler'] == 'SIG_DFL'
-    if name == 'test_sigint_after_final_return':
-        return params['command'] == 'continue'
     return False
 
 
@@ -183,10 +183,11 @@ def compare(args):
             source_bytes(source / 'Lib/bdb.py') != bdb_original):
         raise RuntimeError('Bdb differs from the baseline')
     handler = lambda data: data.split(b'\n    def sigint_handler(', 1)[1].split(b'\n    def ', 1)[0]
-    if handler(candidate) != handler(original):
-        raise RuntimeError('The existing sigint_handler body has changed')
+    expected_handler = handler(original).replace(b'        self.set_step()\n', b'')
+    if handler(candidate) != expected_handler:
+        raise RuntimeError('sigint_handler differs beyond removing redundant set_step')
     summary = {'base_sha': BASE, 'same_native_build': True,
-               'sigint_handler_unchanged': True,
+               'sigint_handler_change': 'remove redundant set_step only',
                'bdb_sha256_git_lf': digest(bdb_original),
                'bdb_sha256_raw': digest((source / 'Lib/bdb.py').read_bytes()),
                'phases': {}}
@@ -205,7 +206,7 @@ def compare(args):
                 raise RuntimeError('Executed Pdb source hash differs from phase')
             if report['test_pdb_sha256'] != digest(tests):
                 raise RuntimeError('Regression tests differ between phases')
-            if len(report['cases']) != 137 or report['methods_run'] != 19:
+            if len(report['cases']) != 151 or report['methods_run'] != 22:
                 raise RuntimeError('Regression case or method count changed')
             if {c['parameters']['backend'] for c in report['cases']} != {'settrace', 'monitoring'}:
                 raise RuntimeError('Both backends were not exercised')
@@ -222,7 +223,7 @@ def compare(args):
             }
         command = [str(executable), '-m', 'test', '-j2', '--timeout', '180',
                    '--junit-xml', str((args.results / 'pdb-bdb.xml').resolve()),
-                   '-v', 'test_pdb', 'test_bdb']
+                   '-v', 'test_pdb', 'test_bdb', 'test_remote_pdb']
         summary['suite_exit_code'] = run(command, source,
                                          args.results / 'pdb-bdb.log', 420)
     finally:

@@ -638,17 +638,17 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         if self.allow_kbdint:
             raise KeyboardInterrupt
         self.message("\nProgram interrupted. (Use 'cont' to resume).")
-        self.set_step()
         self.set_trace(frame)
 
-    def _install_sigint_handler(self):
+    def _install_sigint_handler(self, *, stepping=False):
         if self.nosigint:
             return
-        # Do not take ownership when the last debugged frame is finishing.
-        if (self.frame_returning is not None and
-                self.frame_returning.f_back is self.botframe):
+        # Do not leave a new handler behind when stepping cannot resume.
+        if stepping and (self.botframe is None or
+                         (self.frame_returning is not None and
+                          self.frame_returning.f_back is self.botframe)):
             return
-        handler = self._sigint_handler
+        handler = self.sigint_handler
         try:
             previous = signal.signal(signal.SIGINT, handler)
         except ValueError:  # signal only works in the main thread
@@ -659,12 +659,6 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         if installed is None or previous is not installed:
             Pdb._previous_sigint_handler = previous
         Pdb._installed_sigint_handler = weakref.ref(handler)
-
-    def _sigint_handler(self, signum, frame):
-        # Switching to stepping must not trace calls made by the handler itself.
-        if not self.allow_kbdint:
-            self.stop_trace()
-        self.sigint_handler(signum, frame)
 
     def reset(self):
         bdb.Bdb.reset(self)
@@ -2077,7 +2071,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         else:
             lineno = None
         self.set_until(self.curframe, lineno)
-        self._install_sigint_handler()
+        self._install_sigint_handler(stepping=True)
         return 1
     do_unt = do_until
 
@@ -2105,7 +2099,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             self._print_invalid_arg(arg)
             return
         self.set_next(self.curframe)
-        self._install_sigint_handler()
+        self._install_sigint_handler(stepping=True)
         return 1
     do_n = do_next
 
@@ -2145,7 +2139,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             self._print_invalid_arg(arg)
             return
         self.set_return(self.curframe)
-        self._install_sigint_handler()
+        self._install_sigint_handler(stepping=True)
         return 1
     do_r = do_return
 

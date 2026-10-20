@@ -280,6 +280,8 @@ access further features, you have to do this yourself:
    By default, Pdb sets a handler for the SIGINT signal (which is sent when the
    user presses :kbd:`Ctrl-C` on the console) when you give a :pdbcmd:`continue`,
    :pdbcmd:`next`, :pdbcmd:`until`, or :pdbcmd:`return` command in the main thread.
+   The latter three commands do not install a handler during post-mortem
+   debugging.
    This allows you to break into the debugger again by pressing :kbd:`Ctrl-C`.
    Stopping may be delayed until a running C function returns to Python code.
    At the next prompt, Pdb restores the previous Python handler or signal

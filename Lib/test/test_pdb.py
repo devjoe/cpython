@@ -3679,7 +3679,8 @@ class PdbSigintTests(unittest.TestCase):
                         signal.signal(signal.SIGINT, original)
                         debugger, _ = self.make_pdb(backend, ['quit'])
                         debugger.reset()
-                        frame = debugger.curframe = sys._getframe()
+                        frame = sys._getframe()
+                        debugger.curframe = debugger.botframe = frame
                         debugger.onecmd(command)
                         self.assertIs(getattr(signal.getsignal(signal.SIGINT),
                                               '__self__', None), debugger)
@@ -3696,7 +3697,8 @@ class PdbSigintTests(unittest.TestCase):
                     signal.signal(signal.SIGINT, signal.default_int_handler)
                     debugger, _ = self.make_pdb(backend, ['quit'])
                     debugger.reset()
-                    frame = debugger.curframe = sys._getframe()
+                    frame = sys._getframe()
+                    debugger.curframe = debugger.botframe = frame
                     debugger.onecmd(command)
                     signal.signal(signal.SIGINT, replacement)
                     debugger.interaction(frame, None)
@@ -3704,7 +3706,7 @@ class PdbSigintTests(unittest.TestCase):
                     # A later session must not restore the now-stale handler.
                     other, _ = self.make_pdb(backend, ['quit'])
                     other.reset()
-                    other.curframe = frame
+                    other.curframe = other.botframe = frame
                     other.onecmd(command)
                     other.interaction(frame, None)
                     self.assertIs(signal.getsignal(signal.SIGINT), replacement)
@@ -3717,7 +3719,7 @@ class PdbSigintTests(unittest.TestCase):
                 frame = sys._getframe()
                 for debugger in (first, first, second):
                     debugger.reset()
-                    debugger.curframe = frame
+                    debugger.curframe = debugger.botframe = frame
                     debugger.onecmd('next')
                 second.interaction(frame, None)
                 self.assertIs(signal.getsignal(signal.SIGINT),
@@ -3781,7 +3783,8 @@ class PdbSigintTests(unittest.TestCase):
                         debugger, _ = self.make_pdb(backend, [],
                                                   nosigint=nosigint)
                         debugger.reset()
-                        debugger.curframe = sys._getframe()
+                        frame = sys._getframe()
+                        debugger.curframe = debugger.botframe = frame
                         debugger.onecmd(command)
                         self.assertIs(signal.getsignal(signal.SIGINT),
                                       signal.default_int_handler)
@@ -3937,12 +3940,48 @@ class PdbSigintTests(unittest.TestCase):
                 self.assertIn("'outer'", output.getvalue())
                 self.assertIn('LEAVING RECURSIVE DEBUGGER', output.getvalue())
 
+    def test_sigint_overridden_handler_preserves_tracing(self):
+        for backend in ('settrace', 'monitoring'):
+            with self.subTest(backend=backend):
+                calls = []
+
+                class CustomPdb(pdb.Pdb):
+                    def sigint_handler(self, signum, frame):
+                        calls.append('custom')
+
+                def function():
+                    signal.raise_signal(signal.SIGINT)
+                    return 42
+
+                output = StringIO()
+                debugger = CustomPdb(
+                    stdin=StringIO("continue\np 'SUBCLASS-BREAKPOINT'\ncontinue\n"),
+                    stdout=output, readrc=False, backend=backend)
+                self.addCleanup(debugger.stop_trace)
+                debugger.set_break(function.__code__.co_filename,
+                                   function.__code__.co_firstlineno + 2)
+                self.assertEqual(self.run_debuggee(debugger, function), 42)
+                self.assertEqual(calls, ['custom'])
+                self.assertIn("'SUBCLASS-BREAKPOINT'", output.getvalue())
+
+    def test_sigint_post_mortem(self):
+        for backend in ('settrace', 'monitoring'):
+            for command in ('next', 'n', 'until', 'unt', 'return', 'r'):
+                with self.subTest(backend=backend, command=command):
+                    debugger, output = self.make_pdb(backend, [command])
+                    try:
+                        raise ValueError('post-mortem')
+                    except ValueError as exc:
+                        pdb._post_mortem(exc, debugger)
+                    self.assertIs(signal.getsignal(signal.SIGINT),
+                                  signal.default_int_handler, output.getvalue())
+
     def test_sigint_after_final_return(self):
         def function():
             return 42
 
         for backend in ('settrace', 'monitoring'):
-            for command in ('continue', 'next', 'until', 'return'):
+            for command in ('next', 'until', 'return'):
                 with self.subTest(backend=backend, command=command):
                     signal.signal(signal.SIGINT, signal.default_int_handler)
                     debugger, output = self.make_pdb(backend, ['next', command])
@@ -5318,6 +5357,35 @@ class ChecklineTests(unittest.TestCase):
 
 @support.requires_subprocess()
 class PdbTestInline(unittest.TestCase):
+    def test_sigint_after_inline_return(self):
+        for backend in ('settrace', 'monitoring'):
+            with self.subTest(backend=backend):
+                script = f"""
+                    import pdb, signal
+                    debugger = pdb.Pdb(readrc=False, backend={backend!r},
+                                       mode='inline')
+                    marker = 'module-live'
+                    events = []
+                    def function():
+                        debugger.set_trace()
+                        return 42
+                    value = function()
+                    events.append('returned')
+                    signal.raise_signal(signal.SIGINT)
+                    events.append('resumed')
+                    print('INLINE-DONE', value, events)
+                """
+                stdout, stderr = self._run_script(script, '''
+                    return
+                    continue
+                    p ('INLINE-LIVE', marker, events)
+                    continue
+                ''')
+                self.assertIn("('INLINE-LIVE', 'module-live', ['returned'])",
+                              stdout)
+                self.assertIn("INLINE-DONE 42 ['returned', 'resumed']", stdout)
+                self.assertNotIn('KeyboardInterrupt', stdout + stderr)
+
     @unittest.skipIf(sys.flags.safe_path,
                      'PYTHONSAFEPATH changes default sys.path')
     def _run_script(self, script, commands,
