@@ -7,6 +7,7 @@ import io
 import os
 import pdb
 import re
+import signal
 import sys
 import types
 import codecs
@@ -3524,6 +3525,419 @@ def test_pdb_commands_last_breakpoint():
 
 
 @support.force_not_colorized_test_class
+class PdbSigintTests(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(signal.signal, signal.SIGINT,
+                        signal.getsignal(signal.SIGINT))
+        for name in ('_previous_sigint_handler', '_installed_sigint_handler'):
+            if hasattr(pdb.Pdb, name):
+                self.addCleanup(setattr, pdb.Pdb, name, getattr(pdb.Pdb, name))
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+
+    def make_pdb(self, backend, commands, **kwargs):
+        output = StringIO()
+        debugger = pdb.Pdb(stdin=StringIO('\n'.join(commands) + '\n'),
+                           stdout=output, readrc=False, backend=backend,
+                           **kwargs)
+        self.addCleanup(debugger.stop_trace)
+        return debugger, output
+
+    def run_debuggee(self, debugger, function):
+        try:
+            return debugger.runcall(function)
+        except KeyboardInterrupt:
+            self.fail('SIGINT unwound the debuggee instead of pausing it')
+        finally:
+            debugger.clear_all_breaks()
+            debugger.stop_trace()
+
+    def test_sigint_resume_commands(self):
+        for backend in ('settrace', 'monitoring'):
+            for command in ('next', 'n', 'until', 'unt', 'until_line',
+                            'return', 'r'):
+                with self.subTest(backend=backend, command=command):
+                    events = []
+                    traces = []
+
+                    def callee():
+                        marker = 'live'
+                        try:
+                            for count in range(20):
+                                if count == 3:
+                                    traces.append(sys._getframe().f_trace)
+                                    signal.raise_signal(signal.SIGINT)
+                            events.append('resumed')
+                            return 42
+                        finally:
+                            events.append('finally')
+
+                    def caller():
+                        result = callee()
+                        events.append('caller')
+                        return result
+
+                    if command == 'until_line':
+                        command = f'until {caller.__code__.co_firstlineno + 2}'
+                    debugger, output = self.make_pdb(backend, [
+                        command,
+                        'p (marker, count, events)',
+                        'p signal.getsignal(signal.SIGINT) is signal.default_int_handler',
+                        'next',
+                        'p marker',
+                        'continue',
+                    ])
+                    result = self.run_debuggee(debugger, caller)
+                    self.assertEqual(result, 42, output.getvalue())
+                    self.assertEqual(events, ['resumed', 'finally', 'caller'])
+                    self.assertEqual(traces, [None])
+                    self.assertIn("('live', 3, [])", output.getvalue())
+                    self.assertGreaterEqual(output.getvalue().count("'live'"), 2)
+                    self.assertEqual(output.getvalue().count('Program interrupted'), 1)
+                    self.assertNotIn('KeyboardInterrupt', output.getvalue())
+                    self.assertIn('(Pdb) True', output.getvalue())
+
+    def test_sigint_continue(self):
+        for backend in ('settrace', 'monitoring'):
+            for breakpoint in (False, True):
+                with self.subTest(backend=backend, breakpoint=breakpoint):
+                    def callee():
+                        marker = 'live'
+                        signal.raise_signal(signal.SIGINT)
+                        return 42
+
+                    def caller():
+                        result = callee()
+                        return result
+
+                    debugger, output = self.make_pdb(backend, [
+                        'continue', 'p marker', 'continue', 'continue',
+                    ])
+                    if breakpoint:
+                        debugger.set_break(__file__,
+                                           caller.__code__.co_firstlineno + 2)
+                    self.addCleanup(debugger.clear_all_breaks)
+                    self.assertEqual(self.run_debuggee(debugger, caller), 42,
+                                     output.getvalue())
+                    self.assertIn("'live'", output.getvalue())
+                    self.assertEqual(output.getvalue().count('Program interrupted'), 1)
+
+    def test_sigint_repeated_resume(self):
+        for backend in ('settrace', 'monitoring'):
+            with self.subTest(backend=backend):
+                events = []
+
+                def debuggee():
+                    for count in range(2):
+                        signal.raise_signal(signal.SIGINT)
+                        events.append(count)
+                    return 42
+
+                debugger, output = self.make_pdb(backend, [
+                    'return', 'p count', 'return', 'p count', 'continue',
+                ])
+                self.assertEqual(self.run_debuggee(debugger, debuggee), 42)
+                self.assertEqual(events, [0, 1])
+                self.assertEqual(output.getvalue().count('Program interrupted'), 2)
+
+    def test_sigint_during_trace_callback(self):
+        def callee(marker='callback'):
+            return 42
+
+        def caller():
+            return callee()
+
+        for backend in ('settrace', 'monitoring'):
+            with self.subTest(backend=backend):
+                debugger, output = self.make_pdb(backend, [
+                    'next', 'p marker', 'continue',
+                ])
+                dispatch_call = debugger.dispatch_call
+
+                def dispatch(frame, arg):
+                    if frame.f_code is callee.__code__:
+                        signal.raise_signal(signal.SIGINT)
+                    return dispatch_call(frame, arg)
+
+                with patch.object(debugger, 'dispatch_call', dispatch):
+                    self.assertEqual(self.run_debuggee(debugger, caller), 42,
+                                     output.getvalue())
+                self.assertIn("'callback'", output.getvalue())
+
+    def test_sigint_handler_restored(self):
+        def custom(signum, frame):
+            pass
+
+        def raising(signum, frame):
+            raise RuntimeError('custom SIGINT')
+
+        for backend in ('settrace', 'monitoring'):
+            for command in ('continue', 'next', 'until', 'return'):
+                for original in (signal.default_int_handler, signal.SIG_DFL,
+                                 signal.SIG_IGN, custom, raising):
+                    with self.subTest(backend=backend, command=command,
+                                      handler=original):
+                        signal.signal(signal.SIGINT, original)
+                        debugger, _ = self.make_pdb(backend, ['quit'])
+                        debugger.reset()
+                        frame = debugger.curframe = sys._getframe()
+                        debugger.onecmd(command)
+                        self.assertIs(getattr(signal.getsignal(signal.SIGINT),
+                                              '__self__', None), debugger)
+                        debugger.interaction(frame, None)
+                        self.assertIs(signal.getsignal(signal.SIGINT), original)
+
+    def test_sigint_handler_replaced(self):
+        def replacement(signum, frame):
+            pass
+
+        for backend in ('settrace', 'monitoring'):
+            for command in ('continue', 'next', 'until', 'return'):
+                with self.subTest(backend=backend, command=command):
+                    signal.signal(signal.SIGINT, signal.default_int_handler)
+                    debugger, _ = self.make_pdb(backend, ['quit'])
+                    debugger.reset()
+                    frame = debugger.curframe = sys._getframe()
+                    debugger.onecmd(command)
+                    signal.signal(signal.SIGINT, replacement)
+                    debugger.interaction(frame, None)
+                    self.assertIs(signal.getsignal(signal.SIGINT), replacement)
+                    # A later session must not restore the now-stale handler.
+                    other, _ = self.make_pdb(backend, ['quit'])
+                    other.reset()
+                    other.curframe = frame
+                    other.onecmd(command)
+                    other.interaction(frame, None)
+                    self.assertIs(signal.getsignal(signal.SIGINT), replacement)
+
+    def test_sigint_handler_reinstalled(self):
+        for backend in ('settrace', 'monitoring'):
+            with self.subTest(backend=backend):
+                first, _ = self.make_pdb(backend, ['quit'])
+                second, _ = self.make_pdb(backend, ['quit'])
+                frame = sys._getframe()
+                for debugger in (first, first, second):
+                    debugger.reset()
+                    debugger.curframe = frame
+                    debugger.onecmd('next')
+                second.interaction(frame, None)
+                self.assertIs(signal.getsignal(signal.SIGINT),
+                              signal.default_int_handler)
+                first.interaction(frame, None)
+                self.assertIs(signal.getsignal(signal.SIGINT),
+                              signal.default_int_handler)
+
+    def test_next_over_sigint_handler(self):
+        def replacement(signum, frame):
+            pass
+
+        def function():
+            signal.signal(signal.SIGINT, replacement)
+            return 42
+
+        for backend in ('settrace', 'monitoring'):
+            with self.subTest(backend=backend):
+                debugger, output = self.make_pdb(backend, [
+                    'next',
+                    'p signal.getsignal(signal.SIGINT) is replacement',
+                    'continue',
+                ])
+                self.assertEqual(self.run_debuggee(debugger, function), 42)
+                self.assertIn('(Pdb) True', output.getvalue())
+
+    def test_replaced_sigint_handler_does_not_keep_pdb_alive(self):
+        import weakref
+
+        def replacement(signum, frame):
+            pass
+
+        def function():
+            signal.signal(signal.SIGINT, replacement)
+
+        def run(backend):
+            debugger = pdb.Pdb(stdin=StringIO('continue\n'), stdout=StringIO(),
+                               readrc=False, backend=backend)
+            try:
+                debugger.runcall(function)
+            finally:
+                debugger.stop_trace()
+            return weakref.ref(debugger)
+
+        for backend in ('settrace', 'monitoring'):
+            with self.subTest(backend=backend):
+                reference = run(backend)
+                gc.collect()
+                self.assertIsNone(reference())
+
+    def test_sigint_not_installed(self):
+        for backend in ('settrace', 'monitoring'):
+            for nosigint, commands in (
+                (True, ('continue', 'next', 'until', 'return')),
+                (False, ('continue x', 'next x', 'return x', 'until x',
+                         f'until {sys._getframe().f_lineno - 1}')),
+            ):
+                for command in commands:
+                    with self.subTest(backend=backend, nosigint=nosigint,
+                                      command=command):
+                        debugger, _ = self.make_pdb(backend, [],
+                                                  nosigint=nosigint)
+                        debugger.reset()
+                        debugger.curframe = sys._getframe()
+                        debugger.onecmd(command)
+                        self.assertIs(signal.getsignal(signal.SIGINT),
+                                      signal.default_int_handler)
+
+    def test_sigint_nosigint_raises(self):
+        def function():
+            signal.raise_signal(signal.SIGINT)
+
+        for backend in ('settrace', 'monitoring'):
+            for command in ('continue', 'next', 'until', 'return'):
+                with self.subTest(backend=backend, command=command):
+                    debugger, _ = self.make_pdb(backend, [command, 'continue'],
+                                              nosigint=True)
+                    with self.assertRaises(KeyboardInterrupt):
+                        debugger.runcall(function)
+
+    def test_debuggee_sigint_handler_called(self):
+        for backend in ('settrace', 'monitoring'):
+            for raises in (False, True):
+                with self.subTest(backend=backend, raises=raises):
+                    events = []
+
+                    def replacement(signum, frame):
+                        events.append('custom')
+                        if raises:
+                            raise RuntimeError('custom SIGINT')
+
+                    def function():
+                        signal.signal(signal.SIGINT, replacement)
+                        signal.raise_signal(signal.SIGINT)
+                        return 42
+
+                    debugger, output = self.make_pdb(backend, [
+                        'return', 'continue',
+                    ])
+                    if raises:
+                        with self.assertRaisesRegex(RuntimeError, 'custom SIGINT'):
+                            self.run_debuggee(debugger, function)
+                    else:
+                        self.assertEqual(self.run_debuggee(debugger, function), 42)
+                    self.assertEqual(events, ['custom'])
+                    self.assertNotIn('Program interrupted', output.getvalue())
+
+    def test_sigint_non_main_thread(self):
+        import threading
+        from test.support import threading_helper
+
+        def function():
+            value = 1
+            value += 1
+            return value
+
+        for backend in ('settrace', 'monitoring'):
+            with self.subTest(backend=backend):
+                debugger, output = self.make_pdb(backend, [
+                    'next', 'until', 'return', 'continue',
+                ])
+                results = []
+                errors = []
+
+                def run():
+                    try:
+                        results.append(debugger.runcall(function))
+                    except BaseException as error:
+                        errors.append(error)
+                    finally:
+                        debugger.stop_trace()
+
+                thread = threading.Thread(target=run)
+                thread.start()
+                threading_helper.join_thread(thread)
+                self.assertEqual(errors, [], output.getvalue())
+                self.assertEqual(results, [2])
+                self.assertIs(signal.getsignal(signal.SIGINT),
+                              signal.default_int_handler)
+
+    def test_sigint_prompt_and_evaluation(self):
+        class InterruptedInput(StringIO):
+            interrupted = False
+
+            def readline(self, *args, **kwargs):
+                if not self.interrupted:
+                    self.interrupted = True
+                    raise KeyboardInterrupt
+                return super().readline(*args, **kwargs)
+
+        def function():
+            return 42
+
+        for backend in ('settrace', 'monitoring'):
+            for prompt in (False, True):
+                with self.subTest(backend=backend, prompt=prompt):
+                    debugger, output = self.make_pdb(backend, [
+                        '!signal.raise_signal(signal.SIGINT)', 'continue',
+                    ])
+                    if prompt:
+                        debugger.stdin = InterruptedInput('continue\n')
+                    self.assertEqual(self.run_debuggee(debugger, function), 42)
+                    self.assertIn('--KeyboardInterrupt--' if prompt else
+                                  '*** KeyboardInterrupt', output.getvalue())
+
+    def test_sigint_recursive_debug(self):
+        def callee():
+            marker = 'inner'
+            signal.raise_signal(signal.SIGINT)
+            return 42
+
+        def caller(callee=callee):
+            marker = 'outer'
+            return 42
+
+        for backend in ('settrace', 'monitoring'):
+            with self.subTest(backend=backend):
+                debugger, output = self.make_pdb(backend, [
+                    'next', 'debug callee()', 'next', 'p marker', 'quit',
+                    'p marker', 'continue',
+                ])
+                # The recursive debugger obtains the default backend.
+                with patch.object(pdb, '_default_backend', backend):
+                    self.assertEqual(self.run_debuggee(debugger, caller), 42)
+                self.assertIn("'inner'", output.getvalue())
+                self.assertIn("'outer'", output.getvalue())
+                self.assertIn('LEAVING RECURSIVE DEBUGGER', output.getvalue())
+
+    def test_sigint_after_final_return(self):
+        def function():
+            return 42
+
+        for backend in ('settrace', 'monitoring'):
+            for command in ('continue', 'next', 'until', 'return'):
+                with self.subTest(backend=backend, command=command):
+                    signal.signal(signal.SIGINT, signal.default_int_handler)
+                    debugger, output = self.make_pdb(backend, ['next', command])
+                    self.assertEqual(self.run_debuggee(debugger, function), 42,
+                                     output.getvalue())
+                    self.assertIs(signal.getsignal(signal.SIGINT),
+                                  signal.default_int_handler)
+
+    def test_sigint_after_recursive_return(self):
+        def function():
+            return 42
+
+        for backend in ('settrace', 'monitoring'):
+            for command in ('next', 'until', 'return'):
+                with self.subTest(backend=backend, command=command):
+                    debugger, output = self.make_pdb(backend, [
+                        'debug 42', 'next', command,
+                        'p signal.getsignal(signal.SIGINT) is signal.default_int_handler',
+                        'continue',
+                    ])
+                    with patch.object(pdb, '_default_backend', backend):
+                        self.assertEqual(self.run_debuggee(debugger, function), 42)
+                    self.assertIn('(Pdb) True', output.getvalue())
+
+
+@support.force_not_colorized_test_class
 @support.requires_subprocess()
 class PdbTestCase(unittest.TestCase):
     def tearDown(self):
@@ -3595,6 +4009,38 @@ class PdbTestCase(unittest.TestCase):
             f.write(textwrap.dedent(script))
         self.addCleanup(os_helper.rmtree, self.module_name)
         return self._run_pdb(['-m', self.module_name], commands)
+
+    def test_sigint_cli_resume_commands(self):
+        script = """
+            import signal
+            events = []
+
+            def callee():
+                marker = 'live'
+                try:
+                    signal.raise_signal(signal.SIGINT)
+                    return 42
+                finally:
+                    events.append('finally')
+
+            def caller():
+                result = callee()
+                print('DONE', result, events)
+
+            caller()
+        """
+        for command in ('next', 'until', 'return'):
+            with self.subTest(backend='monitoring', command=command):
+                commands = '\n'.join([
+                    'break caller', 'continue', command,
+                    'p (marker, events)', 'continue', 'quit', '',
+                ])
+                stdout, stderr = self.run_pdb_script(script, commands)
+                self.assertIn("('live', [])", stdout)
+                self.assertIn("DONE 42 ['finally']", stdout)
+                self.assertNotIn('Uncaught exception', stdout)
+                self.assertNotIn('post mortem', stdout)
+                self.assertNotIn('KeyboardInterrupt', stdout + stderr)
 
     def _assert_find_function(self, file_content, func_name, expected):
         with open(os_helper.TESTFN, 'wb') as f:

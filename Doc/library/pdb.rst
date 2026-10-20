@@ -278,9 +278,17 @@ access further features, you have to do this yourself:
    that matches one of these patterns. [1]_
 
    By default, Pdb sets a handler for the SIGINT signal (which is sent when the
-   user presses :kbd:`Ctrl-C` on the console) when you give a :pdbcmd:`continue` command.
-   This allows you to break into the debugger again by pressing :kbd:`Ctrl-C`.  If you
-   want Pdb not to touch the SIGINT handler, set *nosigint* to true.
+   user presses :kbd:`Ctrl-C` on the console) when you give a :pdbcmd:`continue`,
+   :pdbcmd:`next`, :pdbcmd:`until`, or :pdbcmd:`return` command in the main thread.
+   This allows you to break into the debugger again by pressing :kbd:`Ctrl-C`.
+   Stopping may be delayed until a running C function returns to Python code.
+   At the next prompt, Pdb restores the previous Python handler or signal
+   disposition if it still owns SIGINT.  If you want Pdb not to touch the SIGINT
+   handler, set *nosigint* to true.
+
+   .. versionchanged:: 3.16
+      The SIGINT handler is also set for :pdbcmd:`next`, :pdbcmd:`until`, and
+      :pdbcmd:`return`.
 
    The *readrc* argument defaults to true and controls whether Pdb will load
    .pdbrc files from the filesystem.

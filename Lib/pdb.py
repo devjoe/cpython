@@ -488,6 +488,8 @@ class PdbPyReplInput:
 
 class Pdb(bdb.Bdb, cmd.Cmd):
     _previous_sigint_handler = None
+    # Weak reference: do not retain a debugger after its handler is replaced.
+    _installed_sigint_handler = None
 
     # Limit the maximum depth of chained exceptions, we should be handling cycles,
     # but in case there are recursions, we stop at 999.
@@ -638,6 +640,30 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         self.message("\nProgram interrupted. (Use 'cont' to resume).")
         self.set_step()
         self.set_trace(frame)
+
+    def _install_sigint_handler(self):
+        if self.nosigint:
+            return
+        # Do not take ownership when the last debugged frame is finishing.
+        if (self.frame_returning is not None and
+                self.frame_returning.f_back is self.botframe):
+            return
+        handler = self._sigint_handler
+        try:
+            previous = signal.signal(signal.SIGINT, handler)
+        except ValueError:  # signal only works in the main thread
+            return
+        installed = Pdb._installed_sigint_handler
+        if installed is not None:
+            installed = installed()
+        if installed is None or previous is not installed:
+            Pdb._previous_sigint_handler = previous
+        Pdb._installed_sigint_handler = weakref.ref(handler)
+
+    def _sigint_handler(self, signum, frame):
+        # Switching to stepping must not trace calls made by the handler itself.
+        self.stop_trace()
+        self.sigint_handler(signum, frame)
 
     def reset(self):
         bdb.Bdb.reset(self)
@@ -915,13 +941,18 @@ class Pdb(bdb.Bdb, cmd.Cmd):
 
     def interaction(self, frame, tb_or_exc):
         # Restore the previous signal handler at the Pdb prompt.
-        if Pdb._previous_sigint_handler:
+        if Pdb._installed_sigint_handler is not None:
             try:
-                signal.signal(signal.SIGINT, Pdb._previous_sigint_handler)
+                installed = Pdb._installed_sigint_handler()
+                if (installed is not None
+                        and signal.getsignal(signal.SIGINT) is installed
+                        and Pdb._previous_sigint_handler is not None):
+                    signal.signal(signal.SIGINT, Pdb._previous_sigint_handler)
             except ValueError:  # ValueError: signal only works in main thread
                 pass
             else:
                 Pdb._previous_sigint_handler = None
+                Pdb._installed_sigint_handler = None
 
         self._current_task = self._get_asyncio_task()
 
@@ -2045,6 +2076,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         else:
             lineno = None
         self.set_until(self.curframe, lineno)
+        self._install_sigint_handler()
         return 1
     do_unt = do_until
 
@@ -2072,6 +2104,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             self._print_invalid_arg(arg)
             return
         self.set_next(self.curframe)
+        self._install_sigint_handler()
         return 1
     do_n = do_next
 
@@ -2111,6 +2144,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             self._print_invalid_arg(arg)
             return
         self.set_return(self.curframe)
+        self._install_sigint_handler()
         return 1
     do_r = do_return
 
@@ -2122,16 +2156,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         if arg:
             self._print_invalid_arg(arg)
             return
-        if not self.nosigint:
-            try:
-                Pdb._previous_sigint_handler = \
-                    signal.signal(signal.SIGINT, self.sigint_handler)
-            except ValueError:
-                # ValueError happens when do_continue() is invoked from
-                # a non-main thread in which case we just continue without
-                # SIGINT set. Would printing a message here (once) make
-                # sense?
-                pass
+        self._install_sigint_handler()
         self.set_continue()
         return 1
     do_c = do_cont = do_continue

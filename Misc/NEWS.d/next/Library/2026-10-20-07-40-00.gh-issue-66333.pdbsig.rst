@@ -1,0 +1,4 @@
+Allow :mod:`pdb` to pause the debugged program on Ctrl-C during ``next``,
+``until``, and ``return``, as with ``continue``. Avoid tracing the signal
+handler itself, and preserve a SIGINT handler installed by the debugged
+program when returning to the prompt. Restore ``SIG_DFL`` correctly.
