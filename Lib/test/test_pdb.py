@@ -7,6 +7,7 @@ import io
 import os
 import pdb
 import re
+import signal
 import sys
 import types
 import codecs
@@ -18,10 +19,10 @@ import zipapp
 import zipfile
 
 from asyncio import set_event_loop
-from contextlib import ExitStack, redirect_stdout
+from contextlib import ExitStack, contextmanager, redirect_stdout
 from io import StringIO
 from test import support
-from test.support import has_socket_support, os_helper
+from test.support import has_socket_support, os_helper, threading_helper
 from test.support.import_helper import import_module
 from test.support.pty_helper import run_pty, FakeInput
 from test.support.script_helper import kill_python
@@ -3521,6 +3522,185 @@ def test_pdb_commands_last_breakpoint():
     *** cannot set commands: no existing breakpoint
     (Pdb) continue
     """
+
+
+class PdbSigintTests(unittest.TestCase):
+    @contextmanager
+    def session(self, backend, commands, **kwargs):
+        previous = signal.getsignal(signal.SIGINT)
+        saved = pdb.Pdb._previous_sigint_handler
+        output = StringIO()
+        debugger = pdb.Pdb(stdin=StringIO('\n'.join(commands) + '\n'),
+                           stdout=output, readrc=False, backend=backend,
+                           **kwargs)
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        pdb.Pdb._previous_sigint_handler = None
+        try:
+            yield debugger, output
+        except KeyboardInterrupt:
+            self.fail('SIGINT unwound the debuggee: ' + output.getvalue())
+        finally:
+            debugger.clear_all_breaks()
+            debugger.stop_trace()
+            signal.signal(signal.SIGINT, previous)
+            pdb.Pdb._previous_sigint_handler = saved
+
+    def test_next_until(self):
+        for backend in ('settrace', 'monitoring'):
+            for command in ('next', 'n', 'until', 'unt', 'until_line'):
+                with self.subTest(backend=backend, command=command):
+                    events = []
+                    traces = []
+
+                    def callee(marker='live'):
+                        try:
+                            traces.append(sys._getframe().f_trace)
+                            signal.raise_signal(signal.SIGINT)
+                            events.append('resumed')
+                            return 42
+                        finally:
+                            events.append('finally')
+
+                    def caller():
+                        result = callee()
+                        return result
+
+                    if command == 'until_line':
+                        command = f'until {caller.__code__.co_firstlineno + 2}'
+                    commands = [command, 'p (marker, events)', 'continue']
+                    with self.session(backend, commands) as (debugger, output):
+                        self.assertEqual(debugger.runcall(caller), 42)
+                        self.assertEqual(traces, [None])
+                        self.assertEqual(events, ['resumed', 'finally'])
+                        self.assertIn("('live', [])", output.getvalue())
+                        self.assertEqual(
+                            output.getvalue().count('Program interrupted'), 1)
+
+    def test_step(self):
+        def function(marker='live'):
+            signal.raise_signal(signal.SIGINT)
+            return 42
+
+        for backend in ('settrace', 'monitoring'):
+            for prefix, command in (([], 'step'), ([], 's'),
+                                    (['up'], 'step'), (['up'], 's')):
+                with self.subTest(backend=backend, prefix=prefix,
+                                  command=command):
+                    commands = prefix + [command, 'p marker', 'continue']
+                    with self.session(backend, commands) as (debugger, output):
+                        self.assertEqual(debugger.runcall(function), 42,
+                                         output.getvalue())
+                        self.assertIn("(Pdb) 'live'", output.getvalue())
+                        self.assertEqual(
+                            output.getvalue().count('Program interrupted'), 1)
+
+    def test_continue(self):
+        def callee(marker='live'):
+            signal.raise_signal(signal.SIGINT)
+            return 42
+
+        def caller():
+            result = callee()
+            return result
+
+        for backend in ('settrace', 'monitoring'):
+            for breakpoint in (False, True):
+                with self.subTest(backend=backend, breakpoint=breakpoint):
+                    commands = ['continue', 'p marker', 'continue', 'continue']
+                    with self.session(backend, commands) as (debugger, output):
+                        if breakpoint:
+                            debugger.set_break(
+                                __file__, caller.__code__.co_firstlineno + 2)
+                        self.assertEqual(debugger.runcall(caller), 42)
+                        self.assertIn("(Pdb) 'live'", output.getvalue())
+                        self.assertEqual(
+                            output.getvalue().count('Program interrupted'), 1)
+
+    def test_post_mortem(self):
+        for backend in ('settrace', 'monitoring'):
+            for command in ('step', 'next', 'until'):
+                with self.subTest(backend=backend, command=command):
+                    with self.session(backend, [command]) as (debugger, output):
+                        try:
+                            raise ValueError('post-mortem')
+                        except ValueError as exc:
+                            pdb._post_mortem(exc, debugger)
+                        self.assertIs(signal.getsignal(signal.SIGINT),
+                                      signal.default_int_handler)
+
+    def test_final_return(self):
+        def function():
+            return 42
+
+        for backend in ('settrace', 'monitoring'):
+            for command in ('step', 'next', 'until'):
+                with self.subTest(backend=backend, command=command):
+                    commands = ['next', command]
+                    with self.session(backend, commands) as (debugger, output):
+                        self.assertEqual(debugger.runcall(function), 42,
+                                         output.getvalue())
+                        self.assertIs(signal.getsignal(signal.SIGINT),
+                                      signal.default_int_handler)
+
+    def test_up_boundary(self):
+        def function():
+            return 42
+
+        for backend in ('settrace', 'monitoring'):
+            for command in ('next', 'until'):
+                with self.subTest(backend=backend, command=command):
+                    commands = ['up', command]
+                    with self.session(backend, commands) as (debugger, output):
+                        self.assertEqual(debugger.runcall(function), 42,
+                                         output.getvalue())
+                        self.assertIs(signal.getsignal(signal.SIGINT),
+                                      signal.default_int_handler)
+
+    def test_nosigint(self):
+        for backend in ('settrace', 'monitoring'):
+            for command in ('step', 'next', 'until'):
+                with self.subTest(backend=backend, command=command):
+                    handlers = []
+
+                    def function():
+                        handlers.append(signal.getsignal(signal.SIGINT))
+                        return 42
+
+                    with self.session(backend, [command, 'continue'],
+                                      nosigint=True) as (debugger, output):
+                        self.assertEqual(debugger.runcall(function), 42)
+                        self.assertEqual(handlers, [signal.default_int_handler])
+                        self.assertIs(signal.getsignal(signal.SIGINT),
+                                      signal.default_int_handler)
+
+    @threading_helper.requires_working_threading()
+    def test_non_main_thread(self):
+        import threading
+
+        def function():
+            value = 42
+            return value
+
+        for backend in ('settrace', 'monitoring'):
+            for command in ('step', 'next', 'until'):
+                with self.subTest(backend=backend, command=command):
+                    results = []
+                    commands = [command, 'continue']
+                    with self.session(backend, commands) as (debugger, output):
+                        def run():
+                            try:
+                                results.append(debugger.runcall(function))
+                            except BaseException as exc:
+                                results.append(exc)
+                            finally:
+                                debugger.stop_trace()
+
+                        thread = threading.Thread(target=run)
+                        thread.start()
+                        threading_helper.join_thread(thread)
+                        self.assertEqual(results, [42], output.getvalue())
+                        self.assertIs(signal.getsignal(signal.SIGINT),
+                                      signal.default_int_handler)
 
 
 @support.force_not_colorized_test_class
