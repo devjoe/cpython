@@ -1,0 +1,61 @@
+name: Frozen minimal Pdb validation
+
+on:
+  push:
+    branches: ['codex/pdb-minimal-validation-20261023']
+    paths:
+      - 'Tools/pdb_minimal_validation.py'
+      - 'Tools/pdb_minimal_extra_tests.py'
+      - '.github/workflows/pdb-minimal-validation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pdb-minimal-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.repository == 'devjoe/cpython' && github.ref == 'refs/heads/codex/pdb-minimal-validation-20261023'
+    name: ${{ matrix.os }} / both backends
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-2022]
+    steps:
+      - name: Checkout verification harness and frozen candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Fetch the exact candidate object for source verification
+        run: git fetch --no-tags --depth=1 origin 3c43411cc5f5a9bf195c193df2a122219bf4259a
+      - name: Bootstrap interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.15.0'
+          check-latest: false
+      - name: Checkout immutable native runtime source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: python/cpython
+          ref: 6044c6275dcfcb2f2fc49742920e4cfb094089a4
+          path: runtime-source
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Build native interpreter
+        run: python -I Tools/pdb_minimal_validation.py build
+      - name: Compare fixed candidate and baseline, then run full suites
+        run: python -I Tools/pdb_minimal_validation.py compare
+      - name: Preserve all outcomes including failed observations
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pdb-minimal-${{ matrix.os }}
+          path: validation-results/
+          retention-days: 14
+          if-no-files-found: error
